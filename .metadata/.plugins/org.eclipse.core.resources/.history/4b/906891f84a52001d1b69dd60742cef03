@@ -1,0 +1,204 @@
+/*
+ * main.cpp
+
+ *
+ *  Created on: 2018/01/17
+ *      Author: yoneken
+ */
+#include <mainpp.h>
+
+
+ros::NodeHandle nh;
+ugv_t ugv;
+char sendBuffer [BUFFER_SIZE] = {0};
+
+
+/********************************* ROS MESSAGES ***************************************/
+std_msgs::Int32   msg_left_speed;
+std_msgs::Int32   msg_right_speed;
+
+
+/********************************* ROS PUBLISHERS *************************************/
+ros::Publisher pub_ugv_speed   ("left_speed",   &msg_left_speed);
+
+/********************************* ROS CALLBACKS **************************************/
+void left_duty_cb  (const std_msgs::Int32 &msg);
+void right_duty_cb (const std_msgs::Int32 &msg);
+
+
+/******************************** ROS SUBSCRIBERS *************************************/
+ros::Subscriber<std_msgs::Int32> sub_left_duty  ("left_duty",  &left_duty_cb);
+ros::Subscriber<std_msgs::Int32> sub_right_duty ("right_duty", &right_duty_cb);
+
+static void funct1(void);
+static void funct2(void);
+static void funct3(void);
+
+void setup(void)
+{
+	nh.initNode();
+    
+    nh.advertise(pub_ugv_speed);
+
+    nh.subscribe(sub_drive_pid_en);
+    nh.subscribe(sub_drive_setpoint);
+
+    ugv.speed = 0;
+}
+
+
+
+void loop(void)
+{
+    ugv.speed++;
+    msg_ugv_speed.data = ugv.speed;
+    pub_ugv_speed.publish(&msg_ugv_speed);
+
+	nh.spinOnce();
+}
+
+
+void drive_pid_en_cb (const std_msgs::Bool &msg)
+{
+    ugv.drive_pid_en = msg.data;
+#ifdef DEBUG_ENABLE
+    memset(sendBuffer, 0x00, BUFFER_SIZE);
+    sprintf(sendBuffer, "\r\nNew Drive Motor PID Mode: %d\r\n", ugv.drive_pid_en);
+    HAL_UART_Transmit_DMA(&huart2, (uint8_t *) sendBuffer, sizeof(sendBuffer));
+#endif
+}
+
+void drive_setpoint_cb (const std_msgs::Int32 &msg)
+{
+    ugv.drive_setpoint = msg.data;
+#ifdef DEBUG_ENABLE
+    memset(sendBuffer, 0x00, BUFFER_SIZE);
+    sprintf(sendBuffer, "\r\nNew Drive Motor Setpoint: %d\r\n", ugv.drive_setpoint);
+    HAL_UART_Transmit_DMA(&huart2, (uint8_t *) sendBuffer, sizeof(sendBuffer)); 
+#endif
+}
+
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
+	nh.getHardware()->flush();
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+	nh.getHardware()->reset_rbuf();
+}
+
+//funct1 simple ramp up and ramp down forward on all motors
+static void funct1(void) {
+	int zero = 16000;
+	int percentDuty = 12000;
+	int speed = 64;
+
+	for (int i = zero; i > percentDuty; i -= speed) {
+		TIM2->CCR1 = i;
+		TIM2->CCR2 = i;
+		TIM2->CCR3 = i;
+		TIM2->CCR4 = i;
+		ssd1306_Fill(Black);
+		ssd1306_SetCursor(5, 25);
+		sprintf(value, "P: %i", i);
+		ssd1306_WriteString(value, Font_7x10, White);
+
+		ssd1306_UpdateScreen();
+		HAL_Delay(1);
+	}
+
+	for (int i = percentDuty; i < zero; i += speed) {
+		TIM2->CCR1 = i;
+		TIM2->CCR2 = i;
+		TIM2->CCR3 = i;
+		TIM2->CCR4 = i;
+		ssd1306_Fill(Black);
+		ssd1306_SetCursor(5, 25);
+		sprintf(value, "P: %i", i);
+		ssd1306_WriteString(value, Font_7x10, White);
+
+		ssd1306_UpdateScreen();
+		HAL_Delay(1);
+	}
+
+}
+
+//funct 2 same up backwards too
+static void funct2(void) {
+	int zero = 16000;
+	int percentDuty = 12000;
+	int speed = 64;
+
+	//Forward
+	HAL_GPIO_WritePin(GPIOF, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2,
+			GPIO_PIN_RESET);
+	for (int i = zero; i > percentDuty; i -= speed) {
+		TIM2->CCR1 = i;
+		TIM2->CCR2 = i;
+		TIM2->CCR3 = i;
+		TIM2->CCR4 = i;
+		ssd1306_Fill(Black);
+		ssd1306_SetCursor(5, 25);
+		sprintf(value, "P: %i", i);
+		ssd1306_WriteString(value, Font_7x10, White);
+		ssd1306_UpdateScreen();
+		HAL_Delay(1);
+	}
+
+	for (int i = percentDuty; i < zero; i += speed) {
+		TIM2->CCR1 = i;
+		TIM2->CCR2 = i;
+		TIM2->CCR3 = i;
+		TIM2->CCR4 = i;
+		ssd1306_Fill(Black);
+		ssd1306_SetCursor(5, 25);
+		sprintf(value, "P: %i", i);
+		ssd1306_WriteString(value, Font_7x10, White);
+		ssd1306_UpdateScreen();
+		HAL_Delay(1);
+	}
+
+	//Backward
+	HAL_GPIO_WritePin(GPIOF, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2,
+			GPIO_PIN_SET);
+	for (int i = zero; i > percentDuty; i -= speed) {
+		TIM2->CCR1 = i;
+		TIM2->CCR2 = i;
+		TIM2->CCR3 = i;
+		TIM2->CCR4 = i;
+		ssd1306_Fill(Black);
+		ssd1306_SetCursor(5, 25);
+		sprintf(value, "P: %i", i);
+		ssd1306_WriteString(value, Font_7x10, White);
+		ssd1306_UpdateScreen();
+		HAL_Delay(1);
+	}
+
+	for (int i = percentDuty; i < zero; i += speed) {
+		TIM2->CCR1 = i;
+		TIM2->CCR2 = i;
+		TIM2->CCR3 = i;
+		TIM2->CCR4 = i;
+		ssd1306_Fill(Black);
+		ssd1306_SetCursor(5, 25);
+		sprintf(value, "P: %i", i);
+		ssd1306_WriteString(value, Font_7x10, White);
+		ssd1306_UpdateScreen();
+		HAL_Delay(1);
+	}
+}
+
+//funct 3 first test but using libraries
+static void funct3(void) {
+	//driveVehicle(-4000, 4000);
+
+	ssd1306_Fill(Black);
+	ssd1306_SetCursor(5, 5);
+	sprintf(value, "L: %i", 12000);
+	ssd1306_WriteString(value, Font_7x10, White);
+	ssd1306_SetCursor(5, 25);
+	sprintf(value, "R: %i", -12000);
+	ssd1306_WriteString(value, Font_7x10, White);
+	ssd1306_UpdateScreen();
+	HAL_Delay(10000);
+}

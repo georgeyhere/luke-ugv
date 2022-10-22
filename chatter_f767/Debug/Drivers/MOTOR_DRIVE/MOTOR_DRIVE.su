@@ -1,0 +1,2 @@
+../Drivers/MOTOR_DRIVE/MOTOR_DRIVE.c:12:6:initVehicleDrive	16	static
+../Drivers/MOTOR_DRIVE/MOTOR_DRIVE.c:21:6:driveVehicle	24	static
